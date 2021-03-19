@@ -1,0 +1,125 @@
+---
+title: "Statistical inference with the GSS data - Comparing Gun Ownership in US Households"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+* * *
+
+## Part 1: Data
+
+Data collected is of a random sample of people living across the US between the the years 1972 and 2012. Thus, data can be used to interrogate general trends in attitudes of individuals living in the US on a diverse range of societal issues. Random assignment was not used as the study aimed to select random individuals from the US population rather than place individuals into groups for experimental purposes. As a result, the data may only be used to identify overall trends, and cannot be used to evaluate causality between variables.
+
+* * *
+
+## Part 2: Research question
+
+Gun rights continues to be a sensitive topic of discussion in the US. A 2007 survey found that the US which has less than 5 percent of the world's population has 35-55 percent of the world's civilian owned guns [The Atlantic] (https://www.theguardian.com/news/datablog/2012/jul/22/gun-homicides-ownership-world-list). Today, the US stands as one of only three countries that considers gun ownership a constitutional right. With the idea of gun ownership appearing to be deeply ingrained in American society compared to the rest of the world, how do households in which 
+both parents were born in the US and households with at least one immigrant parent compare in gun ownership?
+
+* * *
+
+## Part 3: Exploratory data analysis.
+
+To investigate this question, I will use the survey variable "owngun" in which participants answered whether or not they have a gun in their home.
+
+To start my analysis, I want to create a binary variable to identify respondents who identify as having a known immigrant parent.
+
+```{r create filter NA and create variable impar}
+
+gssparborn <- filter(gss, !(parborn == "NA"))
+
+gssparborn$impar <- ifelse(gssparborn$parborn == "Both In U.S" |
+                      gssparborn$parborn == "Mother; Fa. Dk" |
+                      gssparborn$parborn == "Father; Mo.Dk" |
+                      gssparborn$parborn == "Dk For Both", "no","yes")
+```
+
+Then I will create a new data frame with only the relevant variables of interest.
+
+```{r create new data frame owngun with only variables of interest}
+owngun <- select(gssparborn, caseid, year, impar, owngun)
+```
+
+As I am interested in the differences in gun ownership between individuals with at least one known immigrant parent to those who do not, and not the trend of gun ownership within these populations over time, I will choose to use the most recent data available to compare the two sample populations - 2012.
+
+```{r create data frame with variables of interest from year of interest}
+owngun2012 <- filter(owngun, year == 2012)
+```
+
+To compare valid responses, I will filter out non-respondents and re-classify the variables appropriately: caseid, year, and impar as factors. I will also print a summary of the data.
+
+```{r filter non-respondents and re-classify impar}
+og2012resp <- filter(owngun2012, !(owngun == "NA" | owngun == "Refused"))
+og2012resp$caseid <- as.factor(og2012resp$caseid)
+og2012resp$year <- as.factor(og2012resp$year)
+og2012resp$impar <- as.factor(og2012resp$impar)
+summary(og2012resp)
+```
+
+The data summary shows that the selected data is comprised of 1275 total observations. 974 of which are from households where both parents were born in the US. 301 of which are from housholds with at least one known immigrant parent. Of the sample population, 440 respondents replied that they do have a gun in their home while 835 respondents replied that they did not have a gun in their home. Now I will create summaries for the two sample populations.
+
+```{r check success failure conditions of sample populations}
+og2012respimpar <- filter(og2012resp, impar == "yes")
+og2012respnonimpar <- filter(og2012resp, impar == "no")
+summary(og2012respimpar)
+summary(og2012respnonimpar)
+```
+
+Of the 301 respondents with at least one immigrant parent, 47 responded that they did have a gun in their home and 254 responded that they did not have a gun in their home. Of the 974 respondents where both parents were born in the US, 393 responded that there have a gun in their home and 581 responded that they did not have a gun in their home.
+
+Plotting that data in a stacked bar chart will allow me to visually compare responses from the two sample populations.
+
+```{r plot population responses}
+ggplot(og2012resp) +
+  geom_bar(mapping = aes(x = impar, fill = owngun), position = "fill")
+```
+
+Visually the two populations look strikingly different. The next steps will be to estimate the difference between the two populations and determine if there is a statistical difference between them.
+
+* * *
+
+## Part 4: Inference
+
+The research questions is: How do households in which both parents were born in the US and households with at least one immigrant parent compare in gun ownership?
+
+Before running the statistical analysis, I will first confirm the conditions of the Central Limit Theorem:
+
+Condition 1: Independence
+
+Based on the summary above and what we know about data collection of the gss study, random sampling was used to collect the data and the total number of observations of the populations, 974 and 301 are less than 10% of their respective overall populations. Based on what we know about the survey, there is no reason to expect that the samples of households are dependent, we can assume that they are indeed independent. Therefore the condition for within group and between group independence is met.
+
+Condition 2: Sample Size/Skew
+
+Based on the summary of the individual sample populations above, both sample populations satisfy the the success/failure condition as each sample population has more than 10 successes and failures. That is, there are at least 10 observations where respondents who stated that there was a gun in their home (success) and at least 10 respondents who stated that there was not a gun in their home (failure) for both sample populations. Therefore, we can assume that the sampling distribution of the difference between the two sample populations is nearly normal. Both conditions are met, and we can move forward with our statistical analysis.
+
+To compare the two proportions, I will perform a two-sample test of proportions, I will reconfigure the data to a two x two column by dropping the unused factor of "Refused" from the owngun variable.
+
+```{r test two proportions for equality}
+prop.test(table(og2012resp$impar,droplevels(og2012resp$owngun)))
+```
+
+The null hypothesis is that there is no difference in the proportions of gun ownership between households where both parents were born in the US and households where at least one parent immigrated.
+
+The alternate hypothesis is that there is a difference between these two populations.
+
+Based on this analysis, we should reject the null hypothesis that there is no difference in gun ownership between the two sample populations as the p-value of 5.276e-15 is less than the significance level of .05 at 95% confidence. This conclusion agrees with the calculated confidence interval of .19 to .30 which estimates that the difference in gun ownership of the two sample populations is between 19 and 30 percent. 0 percent lies outside of the confidence interval. Therefore, based on this confidence interval, gun ownership between the two sample populations is not equal.
